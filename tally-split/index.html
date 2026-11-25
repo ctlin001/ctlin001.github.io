@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Split shared costs with friends. No account needed.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tally Split</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: calm, exact, a shared ledger friends trust.
+   IDEA: an atlas plate of who-owes-whom — one shared axis, money flowing left (owes) or right (is owed).
+   PICTURE: the balance plate: each person a bar on a centre zero line, plus the settle-up route list.
+   COLOUR/TYPE: deep sea ground, sky = is owed, signal pink = owes, white ink; Hanken Grotesk 300 large figures.
+   LAYOUT: header strip, tall balance plate, then expenses/people strips; editor as a bottom sheet. */
+:root{color-scheme:dark;--bg:#0a2540;--panel:#10304f;--panel2:#163a5e;--line:#2a527a;--ink:#ffffff;--mute:#a9c1d9;--sky:#8fd3ff;--pink:#ff5c8a;--ok:#8fd3ff}
+:root[data-theme=light],:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Hanken Grotesk",system-ui,sans-serif;overflow-x:clip}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
+.topbar{position:sticky;top:0;z-index:5;background:rgba(10,37,64,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.tb{max-width:1240px;margin:0 auto;padding:10px max(3vw,14px);display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.logo{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:700;margin-right:auto}
+#grpbar{flex-wrap:nowrap}
+@media(max-width:899px){.tb{flex-wrap:nowrap}.logo{font-size:0;gap:0;margin-right:0}#grpbar{flex:1}#gsel{flex:1;width:auto;max-width:none}}
+.app{max-width:1240px;margin:0 auto;padding:0 max(3vw,14px);display:grid;grid-template-columns:minmax(0,1fr);gap:28px}
+#side{display:none}
+@media(min-width:900px){.app{grid-template-columns:240px minmax(0,1fr)}#side{display:block;position:sticky;top:70px;align-self:start;padding-top:22px}.mob{display:none!important}}
+.gl{display:grid;gap:4px;margin:8px 0 14px}
+.gl button{text-align:left;background:none;border:1px solid transparent;border-radius:10px;padding:10px 12px;min-height:44px;font-weight:600;color:var(--mute)}
+.gl button[aria-current=true]{background:var(--panel);border-color:var(--line);color:var(--ink)}
+.side-h{font-size:13px;color:var(--mute);font-weight:600;margin:0}
+.join .item{grid-template-columns:minmax(0,1fr) auto}
+.linkbox{display:flex;gap:8px}.linkbox input{flex:1}
+ol.steps{padding-left:20px;color:var(--mute)}ol.steps li{margin:6px 0}
+select,input[type=text],input[type=number],input[type=date],input[inputmode],textarea{background:var(--panel);border:1px solid var(--line);border-radius:10px;min-height:44px;padding:8px 10px;font-size:16px;width:100%}
+.btn{min-height:44px;padding:8px 16px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);font-weight:600}
+.btn.pri{background:var(--sky);color:#0a2540;border-color:var(--sky)}
+.btn.warn{background:transparent;border-color:var(--pink);color:var(--pink)}
+.btn.ghost{background:transparent}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.grp{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.grp select{width:auto;max-width:60vw}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:8px 0 0;overflow-x:auto}
+.tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;min-height:44px;color:var(--mute);font-weight:600;flex:none}
+.tabs button[aria-selected=true]{color:var(--ink);border-color:var(--sky)}
+.plate{padding:22px 0 10px}
+.big{font-weight:300;font-size:clamp(36px,7vw,52px);line-height:1.05;margin:0}
+.sub{color:var(--mute);margin:4px 0 18px}
+.bal{display:grid;gap:10px}
+.row{display:grid;grid-template-columns:minmax(0,9em) minmax(0,1fr) minmax(0,7em);gap:10px;align-items:center}
+.row .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .amt{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:600}
+.axis{position:relative;height:26px;background:linear-gradient(var(--line),var(--line)) center/1px 100% no-repeat}
+.axis i{position:absolute;top:3px;bottom:3px;border-radius:4px}
+.pos{color:var(--sky)}.neg{color:var(--pink)}.zero{color:var(--mute)}
+.tag{font-size:13px;color:#0a2540;background:var(--sky);border-radius:6px;padding:1px 6px;margin-left:6px;font-weight:700}
+.tag.ph{background:transparent;color:var(--mute);border:1px dashed var(--mute)}
+h2{font-size:20px;margin:28px 0 10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.list{display:grid;gap:8px}
+.item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.item .t{font-weight:600}.item .m{color:var(--mute);font-size:14px}
+.item .r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.item.del{opacity:.55}
+.hint{color:var(--mute);font-size:14px}
+.empty{padding:28px 16px;text-align:center;color:var(--mute);border:1px dashed var(--line);border-radius:14px}
+.fab{position:sticky;bottom:12px;display:flex;gap:8px;justify-content:flex-end;padding:14px 0 6px;pointer-events:none}
+.fab .btn{pointer-events:auto;box-shadow:0 6px 20px rgba(0,0,0,.35)}
+.sw{display:flex;align-items:center;gap:8px;min-height:44px}
+.sw input{width:22px;height:22px}
+/* sheet */
+.scrim{position:fixed;inset:0;background:rgba(3,12,24,.7);display:flex;align-items:flex-end;justify-content:center;z-index:10}
+.sheet{background:var(--bg);border:1px solid var(--line);border-radius:18px 18px 0 0;width:min(680px,100%);max-height:94vh;overflow:auto;padding:18px max(4vw,16px) 24px}
+@media(min-width:700px){.scrim{align-items:center}.sheet{border-radius:18px}}
+.sheet h3{font-size:22px;margin:0 0 12px}
+.f{display:grid;gap:6px;margin-bottom:12px}
+.f label,.lbl{font-size:14px;color:var(--mute);font-weight:600}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.sec{border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0}
+.sec .hd{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:8px}
+.sec .hd select{width:auto}
+.mrow{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,8em) minmax(0,6em);gap:8px;align-items:center;min-height:44px}
+.mrow input[type=checkbox]{width:22px;height:22px}.hit{display:grid;place-items:center;min-width:44px;min-height:44px;margin:-11px}
+.mrow .pv{text-align:right;color:var(--mute);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:14px}
+.status{font-size:14px;margin-top:6px;font-weight:600}
+.acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:14px}
+.acts .sp{margin-right:auto}
+.hist{font-size:14px;color:var(--mute);margin-top:12px}
+.hist li{margin:2px 0}
+.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:10px 16px;border-radius:12px;z-index:20;max-width:90vw}
+.note{background:var(--panel2);border-radius:10px;padding:8px 12px;font-size:14px;color:var(--mute);margin:8px 0}
+@media(max-width:600px){.item{grid-template-columns:minmax(0,1fr)}.item .r{text-align:left}.item .r.grp{justify-content:flex-start}.sec .hd{flex-wrap:wrap}.row{grid-template-columns:minmax(0,6.5em) minmax(0,1fr) minmax(0,6em)}.mrow{grid-template-columns:auto minmax(0,1fr) minmax(0,6.5em)}.mrow .pv{grid-column:2/4;text-align:left;margin-top:-6px}}
+@media(prefers-reduced-motion:no-preference){.axis i{transition:left .3s,width .3s}}
+</style>
+</head>
+<body>
+<header class="topbar"><div class="tb">
+  <span class="logo"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="8" fill="#8fd3ff"/><path d="M10 12h12M16 12v11" stroke="#0a2540" stroke-width="3" stroke-linecap="round"/><circle cx="23" cy="22" r="3" fill="#ff5c8a"/></svg>Tally Split</span>
+  <div class="grp" id="grpbar"></div>
+</div></header>
+<div class="app">
+  <aside id="side" aria-label="Groups"></aside>
+  <div class="content">
+    <div id="conn" class="note" hidden></div>
+    <main id="main"><p class="hint">Loading…</p></main>
+  </div>
+</div>
+<div id="sheet"></div>
+<script>window.TALLY_SUPABASE={url:"https://mnvmblflnnaiykfibnpi.supabase.co",key:"sb_publishable_cT7xYwPNcX7MhFB9qrLqAw_rYg1uHIL"};</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="supa.js"></script>
+<script src="logic.js"></script>
+<script>
+{
+const L = window.SplitLogic;
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const rid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const CATS = ['General','Food & drink','Groceries','Rent','Utilities','Transport','Travel','Entertainment','Shopping','Other'];
+const MODE_LABEL = {equal:'Equally', exact:'Exact amounts', percent:'Percentages', shares:'Shares', adjust:'Adjustments (+/−)'};
+
+const S = { db:null, user:null, myId:null, canWrite:true, groups:[], gid:null, group:null, members:[], records:[], view:'balances', search:'', names:{}, loaded:{groups:false, members:false, records:false}, unsub:[] , showDeleted:false};
+
+function toast(msg){ document.querySelectorAll('.toast').forEach(x => x.remove()); const t = document.createElement('div'); t.className='toast'; t.textContent = msg; document.body.appendChild(t); setTimeout(()=>t.remove(), 3200); }
+function connNote(msg){ const n = $('#conn'); n.hidden = !msg; n.textContent = msg || ''; }
+
+/* ---------- in-memory fallback store (same calls the page uses) ---------- */
+function memoryDB(){
+  const docs = new Map(); const subs = new Set();
+  const snapOf = (path, data) => ({ id: path.split('/').pop(), exists: !!data, data: () => data ? JSON.parse(JSON.stringify(data)) : undefined, metadata:{fromCache:false,hasPendingWrites:false} });
+  const fire = () => subs.forEach(s => s());
+  const coll = cp => ({ path: cp,
+    doc: id => docRef(cp + '/' + (id || rid('d'))),
+    async get(){ const out = []; for (const [p,d] of docs) { if (p.split('/').slice(0,-1).join('/') === cp) out.push(snapOf(p,d)); } return { docs: out, size: out.length, empty: !out.length }; },
+    onSnapshot(next){ const run = () => { const out = []; for (const [p,d] of docs) { const parts = p.split('/'); if (parts.slice(0,-1).join('/') === cp) out.push(snapOf(p,d)); } out.sort((a,b)=>a.id<b.id?-1:1); next({docs:out,size:out.length,empty:!out.length,metadata:{fromCache:false,hasPendingWrites:false},docChanges:()=>[]}); }; subs.add(run); setTimeout(run,0); return () => subs.delete(run); } });
+  const docRef = p => ({ id: p.split('/').pop(), path: p,
+    async get(){ return snapOf(p, docs.get(p)); },
+    async set(d){ docs.set(p, JSON.parse(JSON.stringify(d))); fire(); },
+    async update(d){ if (!docs.has(p)) throw {code:'invalid_argument',message:'missing'}; docs.set(p, Object.assign({}, docs.get(p), JSON.parse(JSON.stringify(d)))); fire(); },
+    async delete(){ docs.delete(p); fire(); },
+    collection: c => coll(p + '/' + c) });
+  return { doc: docRef, collection: coll };
+}
+
+/* ---------- data access ---------- */
+async function write(path, data, mode){
+  try {
+    const ref = S.db.doc(path);
+    if (mode === 'update') await ref.update(data); else await ref.set(data);
+    return true;
+  } catch (e) {
+    const code = e && e.code;
+    if (code === 'invalid_argument' && S.memory !== true) { S.canWrite = false; render(); }
+    toast(code === 'quota_exceeded' ? 'Storage is full — delete old groups to add more.' : code === 'invalid_argument' ? 'You don’t have permission to edit here. Ask the owner to share it as a Contributor.' : 'Couldn’t save. Check your connection and try again.');
+    return false;
+  }
+}
+function stamp(text){ return { at: new Date().toISOString(), by: S.myId || null, text }; }
+
+function subscribeGroups(){
+  const timer = setTimeout(() => { if (!S.loaded.groups) connNote('The shared data can’t be reached yet. What you see may be out of date.'); }, 10000);
+  S.db.collection('groups').onSnapshot(snap => {
+    S.groups = snap.docs.filter(d => d.exists).map(d => Object.assign({ id: d.id }, d.data()));
+    S.groups.sort((a,b) => String(a.name).localeCompare(String(b.name)));
+    if (!snap.metadata.fromCache) { S.loaded.groups = true; clearTimeout(timer); if (!S.memory) connNote(''); }
+    if (!S.gid || !S.groups.some(g => g.id === S.gid)) {
+      const fromHash = location.hash.replace(/^#g-/, '');
+      let saved = null; try { saved = localStorage.getItem('tally.gid'); } catch (_) {}
+      const pick = [fromHash, saved].find(id => id && S.groups.some(g => g.id === id)) || (S.groups[0] && S.groups[0].id) || null;
+      if (S.gid && pick !== S.gid && !S.selfDeleting) toast('That group was deleted.');
+      if (pick !== S.gid) openGroup(pick);
+    }
+    S.group = S.groups.find(g => g.id === S.gid) || null;
+    render();
+  }, err => { clearTimeout(timer); connNote('Shared data isn’t available right now (' + (err && err.code || 'error') + ').'); render(); });
+}
+
+function openGroup(gid){
+  if (gid !== S.gid && $('#sheet').innerHTML) closeSheet();
+  S.unsub.forEach(u => u()); S.unsub = [];
+  S.gid = gid; S.members = []; S.records = []; S.loaded.members = S.loaded.records = false;
+  S.group = S.groups.find(g => g.id === gid) || null;
+  try { if (gid) localStorage.setItem('tally.gid', gid); } catch (_) {}
+  if (gid && location.hash !== '#g-' + gid) { try { history.replaceState(null, '', '#g-' + gid); } catch (_) { location.hash = 'g-' + gid; } }
+  if (!gid) { try { if (location.hash) history.replaceState(null, '', location.pathname + location.search); } catch (_) {} render(); return; }
+  S.unsub.push(S.db.collection('groups/' + gid + '/members').onSnapshot(snap => {
+    S.members = snap.docs.filter(d => d.exists).map(d => Object.assign({ id: d.id }, d.data()));
+    S.members.sort((a,b) => (a.createdAt || '').localeCompare(b.createdAt || '') || (a.id < b.id ? -1 : 1));
+    S.loaded.members = true;
+    resolveNames(); render();
+  }, () => toast('Couldn’t load people.')));
+  S.unsub.push(S.db.collection('groups/' + gid + '/records').onSnapshot(snap => {
+    S.records = snap.docs.filter(d => d.exists).map(d => Object.assign({ id: d.id }, d.data()));
+    S.loaded.records = true; resolveNames(); render();
+  }, () => toast('Couldn’t load expenses.')));
+  render();
+}
+
+async function resolveNames(){
+  if (!S.user || !S.user.profiles) return;
+  const ids = new Set();
+  S.members.forEach(m => m.claimedBy && ids.add(m.claimedBy));
+  S.records.forEach(r => (r.history || []).forEach(h => h.by && ids.add(h.by)));
+  const need = [...ids].filter(id => !(id in S.names));
+  if (!need.length) return;
+  try { const ps = await S.user.profiles(need); need.forEach(id => { S.names[id] = (ps && ps[id] && ps[id].name) || ''; }); render(); } catch (_) {}
+}
+
+/* ---------- derived ---------- */
+const memberName = id => { const m = S.members.find(x => x.id === id); return m ? m.name : 'Removed person'; };
+const active = () => S.members.filter(m => !m.removed);
+const meMember = () => S.myId ? S.members.find(m => m.claimedBy === S.myId) : null;
+function compute(){ return L.ledger(S.records); }
+
+/* ---------- render ---------- */
+function render(){
+  renderBar();
+  const main = $('#main');
+  if (!S.loaded.groups && !S.memory) { main.innerHTML = '<p class="hint">Loading groups…</p>'; return; }
+  if (!S.gid) { main.innerHTML = `<div class="plate"><p class="big">Split costs with anyone.</p><p class="sub">Make a group for a trip, a household or a dinner. Add people by name; they don't need to join.</p>${S.canWrite ? '<button class="btn pri" data-act="newgroup">Create a group</button>' : '<p class="hint">You can view groups here but not create them.</p>'}</div>`; return; }
+  if (!S.memory && (!S.loaded.members || !S.loaded.records)) { main.innerHTML = '<p class="hint" style="padding:24px 0">Loading group…</p>'; return; }
+  if (needsJoin()) { main.innerHTML = viewJoin(); return; }
+  const g = S.group || { name: '' };
+  const tabs = [['balances','Balances'],['expenses','Expenses'],['people','People']];
+  main.innerHTML = `<div class="tabs" role="tablist">${tabs.map(([k,l]) => `<button role="tab" aria-selected="${S.view===k}" data-act="tab" data-v="${k}">${l}</button>`).join('')}</div>
+  <div id="view">${S.view === 'balances' ? viewBalances() : S.view === 'expenses' ? viewExpenses() : viewPeople()}</div>
+  ${S.canWrite ? `<div class="fab"><button class="btn" data-act="newpay" ${active().length < 2 ? 'disabled' : ''}>Record payment</button><button class="btn pri" data-act="newexp" ${active().length < 1 ? 'disabled' : ''}>Add expense</button></div>` : ''}`;
+  if (!S.canWrite) main.insertAdjacentHTML('afterbegin', '<div class="note">View only: you can see this group but not change it.</div>');
+}
+
+function renderBar(){
+  const bar = $('#grpbar');
+  const opts = S.groups.map(g => `<option value="${esc(g.id)}" ${g.id===S.gid?'selected':''}>${esc(g.name || 'Untitled group')}</option>`).join('');
+  bar.innerHTML = (S.groups.length ? `<select id="gsel" class="mob" data-act="pickgroup" aria-label="Group">${opts}</select>` : '') +
+    (S.canWrite ? `<button class="btn ghost mob" data-act="newgroup" aria-label="New group" title="New group">+</button>` : '') +
+    (S.canWrite && S.gid && !needsJoin() ? `<button class="btn ghost mob" data-act="groupmenu" aria-label="Group settings" title="Group settings">\u22ef</button>` : '') +
+    (S.gid && !S.memory && S.canWrite ? '<button class="btn pri" data-act="invite">Invite</button>' : '');
+  const side = $('#side');
+  side.innerHTML = `<p class="side-h">All groups</p><div class="gl">${S.groups.map(g => `<button data-act="pickgroup2" data-id="${esc(g.id)}" aria-current="${g.id===S.gid}">${esc(g.name || 'Untitled group')}</button>`).join('') || '<span class="hint">No groups yet</span>'}</div>` +
+    (S.canWrite ? `<button class="btn" style="width:100%" data-act="newgroup">New group</button>${S.gid && !needsJoin() ? '<button class="btn ghost" style="width:100%;margin-top:8px" data-act="editgroup">Rename group</button>' + (canDeleteGroup() ? '<button class="btn warn" style="width:100%;margin-top:8px" data-act="delgroup">Delete group</button>' : '') : ''}` : '');
+}
+const nameId = n => 'n-' + Array.from(n.trim().toLowerCase().replace(/\s+/g, ' ')).map(c => c.codePointAt(0).toString(36)).join('.');
+async function nameTaken(gid, id){ try { const d = await S.db.doc('groups/' + gid + '/members/' + id).get(); const v = d.exists && d.data(); return !!(v && !v.removed); } catch (_) { return false; } }
+// Claim a member (existing, or create-and-claim when newDoc given). Confirms with the store before welcoming.
+async function claimMember(mid, name, newDoc){
+  const gid = S.gid, fromJoin = needsJoin();
+  const ref = S.db.doc('groups/' + gid + '/members/' + mid);
+  if (typeof ref.acquire === 'function') {
+    try { const l = await ref.acquire({ holder: S.myId, ttlMs: 5000 }); if (l && l.acquired === false) { toast(name + ' is being claimed by someone else right now.'); return; } } catch (_) {}
+  }
+  try { const cur = await ref.get(); const d = cur.exists && cur.data();
+    if (newDoc && d && !d.removed) { toast('Someone just added ' + name + '. If it\u2019s you, tap \u201cThat\u2019s me\u201d.'); return; }
+    if (!newDoc && d && d.claimedBy && d.claimedBy !== S.myId) { toast(name + ' was just claimed by someone else.'); return; }
+  } catch (_) {}
+  S.claiming = true; toast('Joining as ' + name + '\u2026');
+  const ok = newDoc ? await write(ref.path, newDoc) : await write(ref.path, { claimedBy: S.myId }, 'update');
+  if (!ok) { S.claiming = false; return; }
+  await new Promise(r => setTimeout(r, 900));
+  let mine = false;
+  try { const d = (await ref.get()).data(); mine = !!(d && d.claimedBy === S.myId); } catch (_) {}
+  S.claiming = false;
+  if (S.gid !== gid) return;
+  if (mine) { if (fromJoin) S.view = 'balances'; toast('Welcome, ' + name + '!'); }
+  else toast(name + ' was claimed by someone else at the same moment. Pick another name.');
+  render();
+}
+function canDeleteGroup(){ const g = S.group; if (!S.canWrite || !g) return false; return S.memory || !g.createdBy || g.createdBy === S.myId; }
+async function deleteGroup(gid){
+  const base = 'groups/' + gid;
+  let lists;
+  try { lists = await Promise.all(['records', 'members'].map(sub => S.db.collection(base + '/' + sub).get().then(sn => sn.docs.map(d => base + '/' + sub + '/' + d.id)))); }
+  catch (e) { toast('Couldn\u2019t delete the group. Nothing was removed \u2014 try again.'); return false; }
+  try {
+    await S.db.doc(base).delete();   // group disappears for everyone first
+    for (const path of lists.flat()) await S.db.doc(path).delete();
+    return true;
+  } catch (e) { toast('The group was removed, but some of its data couldn\u2019t be cleaned up.'); return true; }
+}
+const SHARE_BASE = 'https://claude.ai/artifact/87QRsQ8AxEpyFLNnwafTxj';
+const inviteLink = () => (S.public ? location.origin + location.pathname : SHARE_BASE) + '#g-' + S.gid;
+function lookedKey(){ return 'tally.look.' + S.gid; }
+function hasLooked(){ if (S.looked && S.looked[S.gid]) return true; try { return localStorage.getItem(lookedKey()) === '1'; } catch (_) { return false; } }
+function needsJoin(){ if (S.claiming) return S.joinShown; return S.joinShown = !!(S.gid && S.loaded.members && !S.memory && S.myId && S.canWrite && !meMember() && !hasLooked() && !(S.group && S.group.createdBy === S.myId)); }
+function viewJoin(){
+  const g = S.group || { name: '' };
+  const rows = active().map(m => {
+    const who = m.claimedBy ? (S.names[m.claimedBy] ? 'joined: ' + esc(S.names[m.claimedBy]) : 'joined') : 'not joined';
+    return `<div class="item"><div><div class="t">${esc(m.name)} <span class="tag ${m.claimedBy ? '' : 'ph'}">${who}</span></div></div><div class="r">${m.claimedBy ? '<span class="hint">taken</span>' : `<button class="btn pri" data-act="claim" data-id="${esc(m.id)}">That\u2019s me</button>`}</div></div>`;
+  }).join('');
+  return `<div class="plate join"><p class="sub">You\u2019re invited to</p><p class="big">${esc(g.name || 'this group')}</p><p class="sub">Pick your name so the balances show what you owe and are owed. Names marked \u201cjoined\u201d already belong to someone.</p>
+  <div class="list">${rows || '<div class="empty">Nobody has been added yet.</div>'}</div>
+  <h2>Not on the list?</h2>
+  <form id="joinadd" class="two"><input type="text" id="jname" placeholder="Your name" maxlength="40" aria-label="Your name" required><button class="btn" type="submit">Add me and join</button></form>
+  <p style="margin-top:18px"><button class="btn ghost" data-act="justlook">Just look around</button></p></div>`;
+}
+function openInvite(){
+  sheet(`<h3>Invite people to ${esc(S.group ? S.group.name : 'this group')}</h3>
+  <div class="linkbox"><input type="text" id="invlink" readonly value="${esc(inviteLink())}" aria-label="Invite link"><button class="btn pri" data-act="copylink">Copy</button></div>
+  ${S.public ? '<p class="hint">Anyone with this link can open the group, pick their name and add expenses. No account needed.</p>' : '<ol class="steps"><li>Give them access: on this page\u2019s <b>Share</b> menu, add them (or the link) as <b>Contributor</b> so they can add and edit expenses.</li><li>Send them this link. It opens this group and asks them to pick their name or add themselves.</li></ol>'}
+  <div class="acts"><button class="btn" data-act="close">Done</button></div>`);
+}
+
+function viewBalances(){
+  const ms = S.members;
+  if (!ms.length) return `<div class="plate"><p class="big">${esc(S.group && S.group.name)}</p><p class="sub">Start by adding the people in this group.</p><button class="btn pri" data-act="tab" data-v="people">Add people</button></div>`;
+  const c = compute(); const me = meMember();
+  const max = Math.max(1, ...ms.map(m => Math.abs(c.net[m.id] || 0)));
+  const head = me ? (() => { const n = c.net[me.id] || 0; return n > 0 ? `You are owed <span class="pos">${L.fmt(n)}</span>` : n < 0 ? `You owe <span class="neg">${L.fmt(-n)}</span>` : 'You are all settled up'; })()
+    : `${L.fmt(c.spend)} spent in total`;
+  const rows = ms.filter(m => !m.removed || (c.net[m.id] || 0) !== 0).map(m => {
+    const n = c.net[m.id] || 0; const w = Math.abs(n) / max * 50;
+    const bar = n === 0 ? '' : `<i style="${n>0?'left:50%':'left:'+(50-w)+'%'};width:${w}%;background:${n>0?'var(--sky)':'var(--pink)'}"></i>`;
+    return `<div class="row"><div class="nm">${esc(m.name)}${me && me.id===m.id ? '<span class="tag">you</span>' : ''}</div><div class="axis" aria-hidden="true">${bar}</div><div class="amt ${n>0?'pos':n<0?'neg':'zero'}">${n>0?'+':''}${n===0?'settled':L.fmt(n)}</div></div>`;
+  }).join('');
+  const simplifyOn = !S.group || S.group.simplify !== false;
+  const plan = simplifyOn ? L.simplify(c.net) : c.debts;
+  const planHtml = plan.length ? plan.map(t => `<div class="item"><div><div class="t">${esc(memberName(t.from))} pays ${esc(memberName(t.to))}</div></div><div class="r"><b>${L.fmt(t.amount)}</b> ${S.canWrite ? `<button class="btn" data-act="settle" data-f="${esc(t.from)}" data-t="${esc(t.to)}" data-a="${t.amount}">Record</button>` : ''}</div></div>`).join('') : '<div class="empty">Nobody owes anything. All settled up.</div>';
+  const bad = c.invalid.length ? `<div class="note">${c.invalid.length} record(s) don't add up and are left out of the balances. Open them in Expenses to fix.</div>` : '';
+  return `<div class="plate"><p class="big">${head}</p><p class="sub">${esc(S.group && S.group.name)} · ${L.fmt(c.spend)} spent · sky = is owed, pink = owes</p>${bad}<div class="bal">${rows}</div></div>
+  <h2>Settle up</h2>
+  <label class="sw"><input type="checkbox" data-act="simplify" ${simplifyOn?'checked':''} ${S.canWrite?'':'disabled'}> Simplify debts (fewest payments)</label>
+  <div class="list">${planHtml}</div>
+  ${perPersonTable(c)}`;
+}
+
+function perPersonTable(c){
+  const ms = S.members.filter(m => (c.paid[m.id]||0) || (c.owed[m.id]||0));
+  if (!ms.length) return '';
+  return `<h2>Who paid, who used</h2><div class="list">${ms.map(m => `<div class="item"><div class="t">${esc(m.name)}</div><div class="r">paid ${L.fmt(c.paid[m.id]||0)} · share ${L.fmt(c.owed[m.id]||0)}</div></div>`).join('')}</div>`;
+}
+
+function viewExpenses(){
+  const q = S.search.trim().toLowerCase();
+  const me = meMember();
+  if (S.showDeleted && !S.records.some(r => r.deleted)) S.showDeleted = false;
+  const recs = S.records.filter(r => !!r.deleted === S.showDeleted)
+    .filter(r => !q || [r.desc, r.category, r.note, (r.amount/100).toFixed(2), r.from && memberName(r.from), r.to && memberName(r.to)].concat(Object.keys((r.paid||{}).values||{}).concat(Object.keys((r.owed||{}).values||{})).map(memberName)).some(x => String(x||'').toLowerCase().includes(q)))
+    .sort((a,b) => String(b.date||'').localeCompare(String(a.date||'')) || String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+  const items = recs.map(r => {
+    if (r.type === 'payment') return `<button class="item ${r.deleted?'del':''}" data-act="open" data-id="${esc(r.id)}"><div><div class="t">${esc(memberName(r.from))} paid ${esc(memberName(r.to))}</div><div class="m">${esc(r.date)} · payment${r.note ? ' · ' + esc(r.note) : ''}</div></div><div class="r">${L.fmt(r.amount||0)}</div></button>`;
+    const ev = L.evaluateExpense(r);
+    const payers = ev.ok ? Object.keys(ev.paid) : [];
+    const who = !ev.ok ? '<span class="neg">Doesn’t add up — tap to fix</span>' : payers.length === 1 ? esc(memberName(payers[0])) + ' paid' : payers.length + ' people paid';
+    let mine = '';
+    if (me && ev.ok) { const n = (ev.paid[me.id]||0) - (ev.owed[me.id]||0); mine = n > 0 ? `<div class="m pos">you lent ${L.fmt(n)}</div>` : n < 0 ? `<div class="m neg">you owe ${L.fmt(-n)}</div>` : ''; }
+    return `<button class="item ${r.deleted?'del':''}" data-act="open" data-id="${esc(r.id)}"><div><div class="t">${esc(r.desc || 'Expense')}</div><div class="m">${esc(r.date)} · ${esc(r.category || 'General')} · ${who}</div></div><div class="r">${L.fmt(r.amount||0)}${mine}</div></button>`;
+  }).join('');
+  const delCount = S.records.filter(r => r.deleted).length;
+  return `<div class="plate"><div class="two"><input type="text" id="search" placeholder="Search expenses" value="${esc(S.search)}" aria-label="Search expenses"><div class="grp" style="justify-content:flex-end"><button class="btn ghost" data-act="csv">Copy CSV</button>${delCount ? `<button class="btn ghost" data-act="toggledel">${S.showDeleted ? 'Back to expenses' : 'Deleted (' + delCount + ')'}</button>` : ''}</div></div></div>
+  <div class="list">${items || `<div class="empty">${S.showDeleted ? 'No deleted records.' : q ? 'No matches.' : 'No expenses yet. Tap “Add expense”.'}</div>`}</div>`;
+}
+
+function viewPeople(){
+  const c = compute(); const me = meMember();
+  const rows = S.members.map(m => {
+    const n = c.net[m.id] || 0;
+    const claimed = m.claimedBy ? (m.claimedBy === S.myId ? '<span class="tag">you</span>' : `<span class="tag">joined${S.names[m.claimedBy] ? ': ' + esc(S.names[m.claimedBy]) : ''}</span>`) : '<span class="tag ph">not joined</span>';
+    const acts = !S.canWrite ? '' : m.removed ? `<button class="btn" data-act="restoreperson" data-id="${esc(m.id)}">Restore</button>` :
+      `<button class="btn ghost" data-act="renameperson" data-id="${esc(m.id)}">Rename</button>` +
+      (S.myId && !S.memory && !m.claimedBy && !me ? `<button class="btn ghost" data-act="claim" data-id="${esc(m.id)}">This is me</button>` : '') +
+      (m.claimedBy && m.claimedBy === S.myId ? `<button class="btn ghost" data-act="unclaim" data-id="${esc(m.id)}">Not me</button>` : '') +
+      `<button class="btn warn" data-act="removeperson" data-id="${esc(m.id)}" ${n !== 0 ? 'disabled' : ''}>Remove</button>` + (n !== 0 ? '<span class="hint">settle first to remove</span>' : '');
+    return `<div class="item ${m.removed?'del':''}"><div><div class="t">${esc(m.name)} ${m.removed ? '<span class="tag ph">removed</span>' : claimed}</div><div class="m">${n>0?'is owed '+L.fmt(n):n<0?'owes '+L.fmt(-n):'settled'}</div></div><div class="r grp">${acts}</div></div>`;
+  }).join('');
+  return `<div class="plate">${!S.memory && S.canWrite ? '<p><button class="btn" data-act="invite">Invite people with a link</button></p>' : ''}${S.canWrite ? `<form id="addperson" class="two"><input type="text" id="pname" placeholder="Name, e.g. Mom or Kevin" maxlength="40" aria-label="New person's name" required><button class="btn pri" type="submit">Add person</button></form><p class="hint">People don't need an account. Anyone opening this page can tap “This is me” to link themselves to a name.</p>` : ''}</div>
+  <div class="list">${rows || '<div class="empty">No people yet.</div>'}</div>`;
+}
+
+/* ---------- sheets ---------- */
+let E = null; // editor state
+function closeSheet(){ $('#sheet').innerHTML = ''; E = null; }
+function sheet(html){ $('#sheet').innerHTML = `<div class="scrim" data-act="scrim"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`; const f = $('#sheet input, #sheet select'); if (f) f.focus(); }
+
+function askText(title, label, value, onOk){
+  sheet(`<h3>${esc(title)}</h3><form id="askform"><div class="f"><label for="asktxt">${esc(label)}</label><input type="text" id="asktxt" maxlength="60" value="${esc(value||'')}" required></div><div class="acts"><button type="button" class="btn ghost" data-act="close">Cancel</button><button class="btn pri" type="submit">Save</button></div></form>`);
+  S.askOk = onOk;
+}
+function confirmSheet(title, body, okLabel, onOk){
+  sheet(`<h3>${esc(title)}</h3><p>${esc(body)}</p><div class="acts"><button class="btn ghost" data-act="close">Cancel</button><button class="btn warn" data-act="confirmok">${esc(okLabel)}</button></div>`);
+  S.confirmOk = onOk;
+}
+
+function newSpec(mode, ids, fill){ const v = {}; ids.forEach(id => { v[id] = fill(id); }); return { mode, vals: v }; }
+function openExpense(rec){
+  const ids = active().map(m => m.id);
+  const me = meMember(); const payer = (me && !me.removed) ? me.id : ids[0];
+  if (rec) {
+    // include removed members that the record references
+    const refIds = new Set(ids.concat(Object.keys((rec.paid||{}).values||{}), Object.keys((rec.owed||{}).values||{})));
+    const toVals = (spec) => { const v = {}; refIds.forEach(id => { const x = spec && spec.values ? spec.values[id] : undefined;
+      v[id] = spec.mode === 'equal' ? !!x : spec.mode === 'adjust' ? (x === undefined ? null : (x/100).toFixed(2)) : x === undefined ? '' : spec.mode === 'exact' ? (x/100).toFixed(2) : String(x); }); return v; };
+    E = { id: rec.id, ids: [...refIds], desc: rec.desc||'', amount: (rec.amount/100).toFixed(2), date: rec.date||today(), category: rec.category||'General', note: rec.note||'',
+      paid: { mode: rec.paid.mode, vals: toVals(rec.paid) }, owed: { mode: rec.owed.mode, vals: toVals(rec.owed) }, history: rec.history||[], deleted: !!rec.deleted, createdAt: rec.createdAt, createdBy: rec.createdBy, updatedAt: rec.updatedAt };
+  } else {
+    E = { id: null, ids, desc:'', amount:'', date: today(), category:'General', note:'', paid: newSpec('equal', ids, id => id === payer), owed: newSpec('equal', ids, () => true), history: [] };
+  }
+  drawExpense();
+}
+function specToLogic(sp){
+  const values = {};
+  for (const id of Object.keys(sp.vals)) {
+    let x = sp.vals[id];
+    if (typeof x === 'string') x = x.trim().replace(/^\+/, '').replace(/%$/, '').trim();
+    if (sp.mode === 'equal') { if (x) values[id] = true; }
+    else if (sp.mode === 'adjust') { if (x !== null) { const c = String(x).trim() === '' ? 0 : L.parseMoney(x); values[id] = c; } }
+    else if (String(x).trim() !== '') values[id] = sp.mode === 'exact' ? L.parseMoney(x) : Number(x);
+  }
+  return { mode: sp.mode, values };
+}
+function switchMode(sp, mode, total){
+  const ids = Object.keys(sp.vals);
+  const wasIn = id => sp.mode === 'equal' ? !!sp.vals[id] : sp.mode === 'adjust' ? sp.vals[id] !== null : String(sp.vals[id]||'').trim() !== '' && Number(sp.vals[id]) !== 0;
+  const inc = ids.filter(wasIn); const use = inc.length ? inc : ids;
+  const vals = {};
+  if (mode === 'equal') ids.forEach(id => { vals[id] = use.includes(id); });
+  else if (mode === 'adjust') ids.forEach(id => { vals[id] = use.includes(id) ? '' : null; });
+  else if (mode === 'shares') ids.forEach(id => { vals[id] = use.includes(id) ? '1' : ''; });
+  else if (mode === 'percent') { const pct = L.allocate(10000, Object.fromEntries(use.map(id => [id,1]))); ids.forEach(id => { vals[id] = use.includes(id) ? String(pct[id]/100) : ''; }); }
+  else { const cents = Number.isInteger(total) && total > 0 ? L.allocate(total, Object.fromEntries(use.map(id => [id,1]))) : {}; ids.forEach(id => { vals[id] = use.includes(id) && cents[id] != null ? (cents[id]/100).toFixed(2) : ''; }); }
+  return { mode, vals };
+}
+function secHtml(key, title){
+  const sp = E[key];
+  const total = L.parseMoney(E.amount);
+  const r = Number.isInteger(total) && total > 0 ? L.computeSplit(total, specToLogic(sp)) : { ok:false, error:'Enter the total first.' };
+  const rows = E.ids.map(id => {
+    const v = sp.vals[id]; const pv = r.ok ? (r.amounts[id] ? L.fmt(r.amounts[id]) : '—') : '';
+    const nm = `<span class="nm">${esc(memberName(id))}</span>`;
+    const box = (on) => `<input type="checkbox" aria-label="Include ${esc(memberName(id))}" data-act="tick" data-k="${key}" data-id="${esc(id)}" ${on?'checked':''}>`;
+    let input = '';
+    if (sp.mode === 'equal') return `<label class="mrow">${box(!!v)}${nm}<span></span><span class="pv" data-pv="${key}-${esc(id)}">${pv}</span></label>`;
+    if (sp.mode === 'adjust') input = `<input inputmode="decimal" placeholder="+0.00" aria-label="Adjustment for ${esc(memberName(id))}" data-in="${key}" data-id="${esc(id)}" value="${esc(v===null?'':v)}" ${v===null?'disabled':''}>`;
+    else input = `<input inputmode="decimal" placeholder="${sp.mode==='exact'?'0.00':sp.mode==='percent'?'0 %':'0 shares'}" aria-label="${esc(MODE_LABEL[sp.mode])} for ${esc(memberName(id))}" data-in="${key}" data-id="${esc(id)}" value="${esc(v)}">`;
+    return `<div class="mrow">${sp.mode==='adjust' ? `<label class="hit">${box(v!==null)}</label>` : '<span></span>'}${nm}${input}<span class="pv" data-pv="${key}-${esc(id)}">${pv}</span></div>`;
+  }).join('');
+  const quick = key === 'owed' ? `<button type="button" class="btn ghost" data-act="all" data-k="${key}">Everyone</button>` : '';
+  return `<div class="sec" id="sec-${key}"><div class="hd"><span class="lbl">${title}</span><span class="grp">${quick}<select data-act="mode" data-k="${key}" aria-label="${title} method">${L.MODES.map(m => `<option value="${m}" ${sp.mode===m?'selected':''}>${MODE_LABEL[m]}</option>`).join('')}</select></span></div>${rows}<div class="status ${r.ok?'pos':'neg'}" id="st-${key}">${r.ok ? '✓ Adds up to ' + L.fmt(total) : esc(r.error)}</div></div>`;
+}
+function drawExpense(){
+  E.gid = S.gid;
+  const hist = (E.history||[]).slice().reverse().map(h => `<li>${esc(new Date(h.at).toLocaleString())} — ${esc(h.text)}${h.by && S.names[h.by] ? ' by ' + esc(S.names[h.by]) : ''}</li>`).join('');
+  sheet(`<h3>${E.id ? 'Edit expense' : 'Add expense'}</h3>
+  <div class="f"><label for="edesc">Description</label><input type="text" id="edesc" maxlength="80" value="${esc(E.desc)}" placeholder="Dinner, rent, Uber…"></div>
+  <div class="two"><div class="f"><label for="eamt">Total (USD)</label><input id="eamt" inputmode="decimal" value="${esc(E.amount)}" placeholder="0.00"></div><div class="f"><label for="edate">Date</label><input type="date" id="edate" value="${esc(E.date)}"></div></div>
+  <div class="f"><label for="ecat">Category</label><select id="ecat">${CATS.map(c => `<option ${c===E.category?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
+  <div id="secs">${secHtml('paid','Paid by')}${secHtml('owed','Split between')}</div>
+  <div class="f"><label for="enote">Note</label><textarea id="enote" rows="2" maxlength="300">${esc(E.note)}</textarea></div>
+  <div class="status neg" id="eerr"></div>
+  <div class="acts">${E.id ? (E.deleted ? '<button class="btn sp" data-act="restore">Restore</button>' : '<button class="btn warn sp" data-act="delexp">Delete</button>') : ''}<button class="btn ghost" data-act="close">Cancel</button><button class="btn pri" data-act="saveexp" id="savebtn">Save</button></div>
+  ${hist ? `<div class="hist"><b>History</b><ul>${hist}</ul></div>` : ''}`);
+  refreshExpense();
+}
+function refreshExpense(){
+  if (!E) return;
+  const total = L.parseMoney(E.amount);
+  for (const key of ['paid','owed']) {
+    const r = Number.isInteger(total) && total > 0 ? L.computeSplit(total, specToLogic(E[key])) : { ok:false, error:'Enter the total first.' };
+    const st = $('#st-' + key); if (st) { st.className = 'status ' + (r.ok ? 'pos' : 'neg'); st.textContent = r.ok ? '✓ Adds up to ' + L.fmt(total) : r.error; }
+    E.ids.forEach(id => { const el = document.querySelector(`[data-pv="${key}-${CSS.escape(id)}"]`); if (el) el.textContent = r.ok ? (r.amounts[id] ? L.fmt(r.amounts[id]) : '—') : ''; });
+  }
+  const ev = L.evaluateExpense(buildExpense());
+  const b = $('#savebtn'); if (b) b.disabled = !ev.ok || E.deleted;
+  const er = $('#eerr'); if (er && !E.forceSave) er.textContent = !E.desc.trim() ? (E.tried ? 'Add a description.' : '') : ev.ok ? '' : ev.error;
+}
+function buildExpense(){
+  const clean = sp => { const s = specToLogic(sp); return { mode: s.mode, values: s.values }; };
+  return { type:'expense', desc: E.desc.trim(), amount: L.parseMoney(E.amount), date: E.date || today(), category: E.category, note: E.note.trim(), paid: clean(E.paid), owed: clean(E.owed) };
+}
+async function saveExpense(){
+  if (E.gid !== S.gid) { closeSheet(); return toast('This group changed or was deleted, so nothing was saved.'); }
+  const rec = buildExpense(); const ev = L.evaluateExpense(rec);
+  if (!ev.ok || !rec.desc) { E.tried = true; refreshExpense(); const d = $('#edesc'); if (d && !rec.desc) d.focus(); return; }
+  const now = new Date().toISOString();
+  const id = E.id || rid('e');
+  const old = E.id ? S.records.find(r => r.id === E.id) : null;
+  if (old && old.updatedAt !== E.updatedAt && !E.forceSave) { E.forceSave = true; $('#eerr').textContent = 'Someone else changed this expense while you were editing. Cancel and reopen it to see their version, or tap Save again to overwrite it.'; return; }
+  const text = old ? describeChange(old, rec) : 'Added ' + L.fmt(rec.amount);
+  const doc = Object.assign(rec, { createdAt: E.createdAt || now, createdBy: E.createdBy || S.myId || null, updatedAt: now, updatedBy: S.myId || null, deleted: false, history: ((old && old.history) || E.history || []).concat([stamp(text)]).slice(-30) });
+  if (await write('groups/' + S.gid + '/records/' + id, doc)) { closeSheet(); toast(old ? 'Expense updated' : 'Expense added'); }
+}
+function describeChange(a, b){
+  const ch = [];
+  if (a.amount !== b.amount) ch.push('total ' + L.fmt(a.amount) + ' → ' + L.fmt(b.amount));
+  if ((a.desc||'') !== b.desc) ch.push('description');
+  if ((a.date||'') !== b.date) ch.push('date');
+  if (JSON.stringify(a.paid) !== JSON.stringify(b.paid)) ch.push('who paid');
+  if (JSON.stringify(a.owed) !== JSON.stringify(b.owed)) ch.push('split');
+  if ((a.category||'') !== b.category || (a.note||'') !== b.note) ch.push('details');
+  return ch.length ? 'Changed ' + ch.join(', ') : 'Saved with no changes';
+}
+
+function openPayment(rec, pre){
+  const ms = rec ? S.members : active();
+  const f = rec ? rec.from : pre ? pre.from : (meMember() || ms[0] || {}).id;
+  const t = rec ? rec.to : pre ? pre.to : (ms.find(m => m.id !== f) || {}).id;
+  E = { pay: true, id: rec ? rec.id : null, rec, gid: S.gid };
+  const opt = sel => ms.map(m => `<option value="${esc(m.id)}" ${m.id===sel?'selected':''}>${esc(m.name)}</option>`).join('');
+  const hist = rec ? (rec.history||[]).slice().reverse().map(h => `<li>${esc(new Date(h.at).toLocaleString())} — ${esc(h.text)}${h.by && S.names[h.by] ? ' by ' + esc(S.names[h.by]) : ''}</li>`).join('') : '';
+  sheet(`<h3>${rec ? 'Edit payment' : 'Record a payment'}</h3><p class="hint">Just a record — no money moves.</p>
+  <div class="two"><div class="f"><label for="pfrom">From (paid)</label><select id="pfrom">${opt(f)}</select></div><div class="f"><label for="pto">To (received)</label><select id="pto">${opt(t)}</select></div></div>
+  <div class="two"><div class="f"><label for="pamt">Amount (USD)</label><input id="pamt" inputmode="decimal" value="${rec ? (rec.amount/100).toFixed(2) : pre ? (pre.amount/100).toFixed(2) : ''}" placeholder="0.00"></div><div class="f"><label for="pdate">Date</label><input type="date" id="pdate" value="${esc(rec ? rec.date : today())}"></div></div>
+  <div class="f"><label for="pnote">Note</label><input type="text" id="pnote" maxlength="120" value="${esc(rec ? rec.note : '')}" placeholder="Venmo, cash…"></div>
+  <div class="status neg" id="perr"></div>
+  <div class="acts">${rec ? (rec.deleted ? '<button class="btn sp" data-act="restore">Restore</button>' : '<button class="btn warn sp" data-act="delexp">Delete</button>') : ''}<button class="btn ghost" data-act="close">Cancel</button><button class="btn pri" data-act="savepay" ${rec && rec.deleted ? 'disabled' : ''}>Save</button></div>${hist ? `<div class="hist"><b>History</b><ul>${hist}</ul></div>` : ''}`);
+}
+async function savePayment(){
+  if (E.gid !== S.gid) { closeSheet(); return toast('This group changed or was deleted, so nothing was saved.'); }
+  const from = $('#pfrom').value, to = $('#pto').value, amount = L.parseMoney($('#pamt').value);
+  const err = from === to ? 'Pick two different people.' : !Number.isInteger(amount) || amount <= 0 ? 'Enter an amount more than $0.00.' : '';
+  $('#perr').textContent = err; if (err) return;
+  const now = new Date().toISOString();
+  const cur = E.id ? S.records.find(r => r.id === E.id) : null;
+  if (cur && E.rec && cur.updatedAt !== E.rec.updatedAt && !E.forceSave) { E.forceSave = true; $('#perr').textContent = 'Someone else changed this payment. Cancel and reopen to see it, or tap Save again to overwrite.'; return; }
+  const old = cur || E.rec;
+  const id = E.id || rid('p');
+  const doc = { type:'payment', from, to, amount, date: $('#pdate').value || today(), note: $('#pnote').value.trim(), createdAt: old ? old.createdAt : now, createdBy: old ? old.createdBy : S.myId || null, updatedAt: now, updatedBy: S.myId || null, deleted:false,
+    history: ((old && old.history) || []).concat([stamp(old ? 'Edited payment: ' + L.fmt(amount) : 'Recorded ' + L.fmt(amount))]).slice(-30) };
+  if (await write('groups/' + S.gid + '/records/' + id, doc)) { closeSheet(); toast(old ? 'Payment updated' : 'Payment recorded'); }
+}
+async function setDeleted(flag){
+  if (E.gid !== S.gid) { closeSheet(); return toast('This group changed or was deleted, so nothing was saved.'); }
+  const rec = S.records.find(r => r.id === E.id); if (!rec) return closeSheet();
+  const doc = JSON.parse(JSON.stringify(rec)); delete doc.id;
+  doc.deleted = flag; doc.updatedAt = new Date().toISOString(); doc.updatedBy = S.myId || null;
+  doc.history = (doc.history || []).concat([stamp(flag ? 'Deleted' : 'Restored')]).slice(-30);
+  if (await write('groups/' + S.gid + '/records/' + rec.id, doc)) { closeSheet(); toast(flag ? 'Deleted — find it under “Deleted” to restore' : 'Restored'); }
+}
+
+function csv(){
+  const c = compute(); const ms = S.members;
+  const q = v => { const raw = String(v == null ? '' : v); let s = raw; const num = /^-?\d+(\.\d+)?$/.test(s); if (!num && /^[=+\-@\t\r]/.test(s)) s = "'" + s; return /[",\r\n]/.test(s) || s !== raw ? '"' + s.replace(/"/g,'""') + '"' : s; };
+  const lines = [['Date','Description','Category','Type','Total'].concat(ms.map(m => m.name + ' (net)')).map(q).join(',')];
+  S.records.filter(r => !r.deleted).sort((a,b) => String(a.date).localeCompare(String(b.date))).forEach(r => {
+    const one = L.ledger([r]);
+    lines.push([r.date, r.type === 'payment' ? memberName(r.from) + ' paid ' + memberName(r.to) : r.desc, r.category || '', r.type, (r.amount/100).toFixed(2)].concat(ms.map(m => ((one.net[m.id]||0)/100).toFixed(2))).map(q).join(','));
+  });
+  lines.push(['','Balance','','','' ].concat(ms.map(m => ((c.net[m.id]||0)/100).toFixed(2))).map(q).join(','));
+  return lines.join('\n');
+}
+
+/* ---------- events ---------- */
+let downOnScrim = false;
+document.addEventListener('pointerdown', e => { downOnScrim = !!(e.target.classList && e.target.classList.contains('scrim')); });
+document.addEventListener('click', async ev => {
+  const el = ev.target.closest('[data-act]'); if (!el) return;
+  const act = el.dataset.act;
+  if (act === 'scrim') { if (ev.target === el && downOnScrim) closeSheet(); return; }
+  if (act === 'tab') { S.view = el.dataset.v; S.showDeleted = false; render(); return; }
+  if (act === 'close') return closeSheet();
+  if (act === 'newgroup') return sheet(`<h3>New group</h3><form id="ngform"><div class="f"><label for="ngname">Group name</label><input type="text" id="ngname" maxlength="60" placeholder="Lake trip, Apartment…" required></div><div class="f"><label for="ngme">Your name in this group</label><input type="text" id="ngme" maxlength="40" placeholder="e.g. Jack"></div><div class="acts"><button type="button" class="btn ghost" data-act="close">Cancel</button><button class="btn pri" type="submit">Create</button></div></form>`);
+  if (act === 'pickgroup2') { S.view = 'balances'; openGroup(el.dataset.id); return; }
+  if (act === 'invite') return openInvite();
+  if (act === 'copylink') { const t = $('#invlink'); try { await navigator.clipboard.writeText(t.value); toast('Link copied'); } catch (_) { t.focus(); t.select(); toast('Select the link and copy it'); } return; }
+  if (act === 'justlook') { S.looked = S.looked || {}; S.looked[S.gid] = true; try { localStorage.setItem(lookedKey(), '1'); } catch (_) {} render(); return; }
+  if (act === 'groupmenu') return sheet(`<h3>${esc(S.group ? S.group.name : 'Group')}</h3><div class="acts" style="justify-content:flex-start"><button class="btn" data-act="editgroup">Rename group</button>${canDeleteGroup() ? '<button class="btn warn" data-act="delgroup">Delete group</button>' : ''}<button class="btn ghost" data-act="close">Close</button></div>${canDeleteGroup() ? '' : '<p class="hint">Only the person who created this group can delete it.</p>'}`);
+  if (act === 'delgroup') {
+    if (!canDeleteGroup()) return toast('Only the person who created this group can delete it.');
+    const g = S.group; const pl = (n, a, b) => n + ' ' + (n === 1 ? a : b);
+    const ne = S.records.filter(r => !r.deleted && r.type === 'expense').length, np = S.records.filter(r => !r.deleted && r.type === 'payment').length;
+    sheet(`<h3>Delete \u201c${esc(g.name)}\u201d?</h3><p>This removes the group, ${pl(active().length, 'person', 'people')}, ${pl(ne, 'expense', 'expenses')} and ${pl(np, 'payment', 'payments')} for everyone. It can\u2019t be undone.</p><form id="delform"><div class="f"><label for="delname">Type the group name to confirm</label><input type="text" id="delname" autocomplete="off" placeholder="${esc(g.name)}"></div><div class="acts"><button type="button" class="btn ghost" data-act="close">Cancel</button><button class="btn warn" type="submit" id="delgo" disabled>Delete forever</button></div></form>`);
+    return;
+  }
+  if (act === 'editgroup') return askText('Rename group', 'Group name', S.group && S.group.name, async name => { if (await write('groups/' + S.gid, { name }, 'update')) closeSheet(); });
+  if (act === 'newexp') return openExpense(null);
+  if (act === 'newpay') return openPayment(null, null);
+  if (act === 'settle') return openPayment(null, { from: el.dataset.f, to: el.dataset.t, amount: Number(el.dataset.a) });
+  if (act === 'open') { const r = S.records.find(x => x.id === el.dataset.id); if (!r) return; if (!S.canWrite) return toast('View only'); return r.type === 'payment' ? openPayment(r) : openExpense(r); }
+  if (act === 'saveexp') return saveExpense();
+  if (act === 'savepay') return savePayment();
+  if (act === 'delexp') return setDeleted(true);
+  if (act === 'restore') return setDeleted(false);
+  if (act === 'toggledel') { S.showDeleted = !S.showDeleted; render(); return; }
+  if (act === 'confirmok') { const f = S.confirmOk; S.confirmOk = null; if (f) await f(); return; }
+  if (act === 'all' && E) { const k = el.dataset.k; E[k] = switchMode({ mode:'equal', vals: Object.fromEntries(E.ids.map(id => [id, true])) }, E[k].mode, L.parseMoney(E.amount)); syncFields(); redrawSec(k, '[data-act="all"]'); return; }
+  if (act === 'csv') { const text = csv(); try { await navigator.clipboard.writeText(text); toast('CSV copied — paste it into a spreadsheet'); } catch (_) { sheet(`<h3>Copy CSV</h3><p class="hint">Select all and copy.</p><textarea rows="10" readonly>${esc(text)}</textarea><div class="acts"><button class="btn" data-act="close">Done</button></div>`); } return; }
+  const m = el.dataset.id && S.members.find(x => x.id === el.dataset.id);
+  const dup = (name, id) => S.members.some(x => x.id !== id && !x.removed && x.name.toLowerCase() === name.toLowerCase());
+  if (act === 'renameperson' && m) return askText('Rename', 'Name', m.name, async name => { if (dup(name, m.id)) return toast('There\u2019s already someone called ' + name + '.'); if (await write('groups/' + S.gid + '/members/' + m.id, { name }, 'update')) closeSheet(); });
+  if (act === 'claim' && m) {
+    if (meMember()) return toast('You are already linked to a name.');
+    await claimMember(m.id, m.name, null);
+    return;
+  }
+  if (act === 'unclaim' && m) { await write('groups/' + S.gid + '/members/' + m.id, { claimedBy: null }, 'update'); return; }
+  if (act === 'removeperson' && m) return confirmSheet('Remove ' + m.name + '?', 'They stay on past expenses but won’t appear in new ones. You can restore them later.', 'Remove', async () => { if (await write('groups/' + S.gid + '/members/' + m.id, { removed: true }, 'update')) closeSheet(); });
+  if (act === 'restoreperson' && m) { if (dup(m.name, m.id)) return toast('Someone else is now called ' + m.name + '. Rename them first.'); await write('groups/' + S.gid + '/members/' + m.id, { removed: false }, 'update'); return; }
+});
+function redrawSec(k, sel){ $('#sec-' + k).outerHTML = secHtml(k, k === 'paid' ? 'Paid by' : 'Split between'); refreshExpense(); if (sel) { const f = document.querySelector('#sec-' + k + ' ' + sel); if (f) f.focus(); } }
+function syncFields(){ if (!E || E.pay) return; const g = s => { const x = $(s); return x ? x.value : ''; }; E.desc = g('#edesc'); E.amount = g('#eamt'); E.date = g('#edate'); E.category = g('#ecat') || E.category; E.note = g('#enote'); }
+document.addEventListener('change', ev => {
+  const el = ev.target;
+  if (el.dataset.act === 'pickgroup') { S.view = 'balances'; openGroup(el.value); return; }
+  if (el.dataset.act === 'simplify') { write('groups/' + S.gid, { simplify: el.checked }, 'update'); return; }
+  if (!E || E.pay) return;
+  if (el.dataset.act === 'mode') { syncFields(); const k = el.dataset.k; E[k] = switchMode(E[k], el.value, L.parseMoney(E.amount)); redrawSec(k, 'select[data-act="mode"]'); return; }
+  if (el.dataset.act === 'tick') { syncFields(); const k = el.dataset.k, id = el.dataset.id; const sp = E[k]; if (sp.mode === 'adjust') sp.vals[id] = el.checked ? '' : null; else sp.vals[id] = el.checked; redrawSec(k, '[data-act="tick"][data-id="' + CSS.escape(id) + '"]'); return; }
+  if (el.id === 'ecat') { E.category = el.value; }
+});
+document.addEventListener('input', ev => {
+  const el = ev.target;
+  if (el.id === 'delname') { const b = $('#delgo'); if (b) b.disabled = el.value.trim().toLowerCase() !== String(S.group && S.group.name || '').trim().toLowerCase(); return; }
+  if (el.id === 'search') { S.search = el.value; const pos = el.selectionStart; render(); const s = $('#search'); if (s) { s.focus(); try { s.setSelectionRange(pos, pos); } catch (_) {} } return; }
+  if (!E || E.pay) return;
+  if (el.dataset.in) { E[el.dataset.in].vals[el.dataset.id] = el.value; refreshExpense(); return; }
+  if (['edesc','eamt','edate','enote'].includes(el.id)) { syncFields(); refreshExpense(); }
+});
+document.addEventListener('submit', async ev => {
+  ev.preventDefault();
+  if (ev.target.id === 'askform') { const v = $('#asktxt').value.trim(); if (v && S.askOk) await S.askOk(v); return; }
+  if (ev.target.id === 'delform') {
+    if ($('#delname').value.trim().toLowerCase() !== String(S.group && S.group.name || '').trim().toLowerCase()) return;
+    const gid = S.gid, name = S.group.name; const b = $('#delgo'); if (b) { b.disabled = true; b.textContent = 'Deleting\u2026'; }
+    S.unsub.forEach(u => u()); S.unsub = []; S.selfDeleting = true;
+    const ok = await deleteGroup(gid); S.selfDeleting = false;
+    if (ok) {
+      closeSheet(); try { localStorage.removeItem('tally.gid'); localStorage.removeItem('tally.look.' + gid); } catch (_) {}
+      S.groups = S.groups.filter(g => g.id !== gid); S.view = 'balances';
+      const next = S.groups[0] ? S.groups[0].id : null;
+      if (!next) { try { history.replaceState(null, '', location.pathname); } catch (_) {} }
+      openGroup(next); toast('Deleted \u201c' + name + '\u201d');
+    } else { if (b) { b.disabled = false; b.textContent = 'Delete forever'; } openGroup(S.gid); }
+    return;
+  }
+  if (ev.target.id === 'ngform') {
+    const name = $('#ngname').value.trim(), me = $('#ngme').value.trim(); if (!name) return;
+    const id = rid('g'); const now = new Date().toISOString();
+    if (!(await write('groups/' + id, { name, createdAt: now, createdBy: S.myId || null, simplify: true }))) return;
+    if (me) await write('groups/' + id + '/members/' + nameId(me), { name: me, claimedBy: S.memory ? null : (S.myId || null), removed: false, createdAt: now, createdBy: S.myId || null });
+    closeSheet(); S.view = 'people'; openGroup(id); return;
+  }
+  if (ev.target.id === 'joinadd') {
+    const name = $('#jname').value.trim(); if (!name) return;
+    if (meMember()) return toast('You are already in this group.');
+    if (S.members.some(m => !m.removed && m.name.toLowerCase() === name.toLowerCase())) { toast('That name is already listed. If it\u2019s you, tap \u201cThat\u2019s me\u201d.'); return; }
+    await claimMember(nameId(name), name, { name, claimedBy: S.myId, removed: false, createdAt: new Date().toISOString(), createdBy: S.myId || null });
+    return;
+  }
+  if (ev.target.id === 'addperson') {
+    const name = $('#pname').value.trim(); if (!name) return;
+    if (S.members.some(m => !m.removed && m.name.toLowerCase() === name.toLowerCase())) { toast('There’s already someone called ' + name + '.'); return; }
+    const id = nameId(name);
+    if (await nameTaken(S.gid, id)) { toast('There\u2019s already someone called ' + name + '.'); return; }
+    if (await write('groups/' + S.gid + '/members/' + id, { name, claimedBy: null, removed: false, createdAt: new Date().toISOString(), createdBy: S.myId || null })) { const f = $('#pname'); if (f) { f.value = ''; f.focus(); } }
+  }
+});
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && $('#sheet').innerHTML) closeSheet(); });
+window.addEventListener('hashchange', () => {
+  const id = location.hash.replace(/^#g-/, '');
+  if (id && id !== S.gid && S.groups.some(g => g.id === id)) { S.view = 'balances'; openGroup(id); }
+  else if (S.gid && id !== S.gid) { try { history.replaceState(null, '', '#g-' + S.gid); } catch (_) {} }
+});
+
+/* ---------- start ---------- */
+(async () => {
+  render();
+  let db = null, user = null;
+  const cfg = window.TALLY_SUPABASE;
+  if (cfg && window.supabase && window.TallySupa) {
+    try { db = window.TallySupa.makeSupaDB(window.supabase.createClient(cfg.url, cfg.key)); user = window.TallySupa.browserUser(); S.public = true; } catch (_) { db = null; }
+  } else if (cfg) { connNote('Couldn\u2019t load the database library. Check your connection and reload.'); }
+  if (!S.public) { try { [db, user] = await Promise.all([window.claude ? window.claude.use('db') : null, window.claude ? window.claude.use('user') : null]); } catch (_) {} }
+  S.user = user;
+  if (user) { try { S.myId = await user.id(); } catch (_) {} try { const c = await user.can('data.write'); if (c === false) S.canWrite = false; } catch (_) {} }
+  if (!db) { S.memory = true; S.db = memoryDB(); S.myId = S.myId || 'local-me'; S.loaded.groups = true; connNote('Shared storage isn’t available in this view, so changes stay on this screen only. Open the page from its link while signed in to save and share.'); }
+  else S.db = db;
+  subscribeGroups();
+})();
+}
+</script>
+</body>
+</html>
