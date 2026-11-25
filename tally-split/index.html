@@ -154,7 +154,8 @@ async function write(path, data, mode){
     return true;
   } catch (e) {
     const code = e && e.code;
-    if (code === 'invalid_argument' && S.memory !== true) { S.canWrite = false; closeSheet(); render(); }
+    if (code === 'invalid_argument' && S.memory !== true && !S.public) { S.canWrite = false; closeSheet(); render(); }
+    if (S.public) { toast('Couldn\u2019t save: ' + ((e && e.message) || 'unknown error').slice(0, 160)); return false; }
     toast(code === 'quota_exceeded' ? 'Storage is full — delete old groups to add more.' : code === 'invalid_argument' ? (S.public ? 'This group can’t be edited right now. Reload the page and try again.' : 'You don’t have permission to edit here. Ask the owner to share it as a Contributor.') : 'Couldn’t save. Check your connection and try again.');
     return false;
   }
