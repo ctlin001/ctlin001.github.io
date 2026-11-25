@@ -154,26 +154,35 @@ async function write(path, data, mode){
     return true;
   } catch (e) {
     const code = e && e.code;
-    if (code === 'invalid_argument' && S.memory !== true) { S.canWrite = false; render(); }
-    toast(code === 'quota_exceeded' ? 'Storage is full — delete old groups to add more.' : code === 'invalid_argument' ? 'You don’t have permission to edit here. Ask the owner to share it as a Contributor.' : 'Couldn’t save. Check your connection and try again.');
+    if (code === 'invalid_argument' && S.memory !== true) { S.canWrite = false; closeSheet(); render(); }
+    toast(code === 'quota_exceeded' ? 'Storage is full — delete old groups to add more.' : code === 'invalid_argument' ? (S.public ? 'This group can’t be edited right now. Reload the page and try again.' : 'You don’t have permission to edit here. Ask the owner to share it as a Contributor.') : 'Couldn’t save. Check your connection and try again.');
     return false;
   }
 }
 function stamp(text){ return { at: new Date().toISOString(), by: S.myId || null, text }; }
 
+// Public build: a browser only sees groups it created or opened from an invite link.
+function knownIds(){ let k = []; try { k = JSON.parse(localStorage.getItem('tally.known') || '[]'); } catch (_) {} if (!Array.isArray(k)) k = []; const h = location.hash.replace(/^#g-/, ''); if (/^[a-z0-9]{4,40}$/i.test(h) && !k.includes(h)) k.push(h); return k.filter(x => typeof x === 'string' && /^[a-z0-9]{4,40}$/i.test(x)); }
+function addKnown(id){ try { const k = knownIds(); if (!k.includes(id)) k.push(id); localStorage.setItem('tally.known', JSON.stringify(k)); } catch (_) {} if (S.groupsSub && S.groupsSub.refresh) S.groupsSub.refresh(); }
+function storedKnown(){ try { const k = JSON.parse(localStorage.getItem('tally.known') || '[]'); return Array.isArray(k) ? k : []; } catch (_) { return []; } }
+function dropKnown(id){ try { const k = knownIds().filter(x => x !== id); localStorage.setItem('tally.known', JSON.stringify(k)); } catch (_) {} }
 function subscribeGroups(){
   const timer = setTimeout(() => { if (!S.loaded.groups) connNote('The shared data can’t be reached yet. What you see may be out of date.'); }, 10000);
-  S.db.collection('groups').onSnapshot(snap => {
+  const src = S.public ? S.db.collection('groups').subset(knownIds) : S.db.collection('groups');
+  S.groupsSub = src.onSnapshot(snap => {
     S.groups = snap.docs.filter(d => d.exists).map(d => Object.assign({ id: d.id }, d.data()));
+    if (S.public) { const k = storedKnown(); if (S.groups.some(g => !k.includes(g.id))) { try { localStorage.setItem('tally.known', JSON.stringify([...new Set(k.concat(S.groups.map(g => g.id)))])); } catch (_) {} } connNote(''); }
     S.groups.sort((a,b) => String(a.name).localeCompare(String(b.name)));
     if (!snap.metadata.fromCache) { S.loaded.groups = true; clearTimeout(timer); if (!S.memory) connNote(''); }
-    if (!S.gid || !S.groups.some(g => g.id === S.gid)) {
+    if (S.public && S.gid && S.pendingNew === S.gid) { /* just created; wait for it to appear */ }
+    else if (!S.gid || !S.groups.some(g => g.id === S.gid)) {
       const fromHash = location.hash.replace(/^#g-/, '');
       let saved = null; try { saved = localStorage.getItem('tally.gid'); } catch (_) {}
       const pick = [fromHash, saved].find(id => id && S.groups.some(g => g.id === id)) || (S.groups[0] && S.groups[0].id) || null;
       if (S.gid && pick !== S.gid && !S.selfDeleting) toast('That group was deleted.');
       if (pick !== S.gid) openGroup(pick);
     }
+    if (S.pendingNew && S.groups.some(g => g.id === S.pendingNew)) S.pendingNew = null;
     S.group = S.groups.find(g => g.id === S.gid) || null;
     render();
   }, err => { clearTimeout(timer); connNote('Shared data isn’t available right now (' + (err && err.code || 'error') + ').'); render(); });
@@ -190,7 +199,7 @@ function openGroup(gid){
   S.unsub.push(S.db.collection('groups/' + gid + '/members').onSnapshot(snap => {
     S.members = snap.docs.filter(d => d.exists).map(d => Object.assign({ id: d.id }, d.data()));
     S.members.sort((a,b) => (a.createdAt || '').localeCompare(b.createdAt || '') || (a.id < b.id ? -1 : 1));
-    S.loaded.members = true;
+    S.loaded.members = true; if (S.public) connNote('');
     resolveNames(); render();
   }, () => toast('Couldn’t load people.')));
   S.unsub.push(S.db.collection('groups/' + gid + '/records').onSnapshot(snap => {
@@ -218,6 +227,11 @@ function compute(){ return L.ledger(S.records); }
 
 /* ---------- render ---------- */
 function render(){
+  const keep = ['pname', 'jname'].map(id => { const el = document.getElementById(id); return el ? { id, v: el.value, f: document.activeElement === el, s: el.selectionStart } : null; }).filter(Boolean);
+  render0();
+  for (const k of keep) { const el = document.getElementById(k.id); if (!el) continue; el.value = k.v; if (k.f) { el.focus(); try { el.setSelectionRange(k.s, k.s); } catch (_) {} } }
+}
+function render0(){
   renderBar();
   const main = $('#main');
   if (!S.loaded.groups && !S.memory) { main.innerHTML = '<p class="hint">Loading groups…</p>'; return; }
@@ -258,7 +272,7 @@ async function claimMember(mid, name, newDoc){
   } catch (_) {}
   S.claiming = true; toast('Joining as ' + name + '\u2026');
   const ok = newDoc ? await write(ref.path, newDoc) : await write(ref.path, { claimedBy: S.myId }, 'update');
-  if (!ok) { S.claiming = false; return; }
+  if (!ok) { S.claiming = false; render(); return; }
   await new Promise(r => setTimeout(r, 900));
   let mine = false;
   try { const d = (await ref.get()).data(); mine = !!(d && d.claimedBy === S.myId); } catch (_) {}
@@ -616,6 +630,7 @@ document.addEventListener('submit', async ev => {
     const gid = S.gid, name = S.group.name; const b = $('#delgo'); if (b) { b.disabled = true; b.textContent = 'Deleting\u2026'; }
     S.unsub.forEach(u => u()); S.unsub = []; S.selfDeleting = true;
     const ok = await deleteGroup(gid); S.selfDeleting = false;
+    if (ok && S.public) dropKnown(gid);
     if (ok) {
       closeSheet(); try { localStorage.removeItem('tally.gid'); localStorage.removeItem('tally.look.' + gid); } catch (_) {}
       S.groups = S.groups.filter(g => g.id !== gid); S.view = 'balances';
@@ -628,9 +643,11 @@ document.addEventListener('submit', async ev => {
   if (ev.target.id === 'ngform') {
     const name = $('#ngname').value.trim(), me = $('#ngme').value.trim(); if (!name) return;
     const id = rid('g'); const now = new Date().toISOString();
-    if (!(await write('groups/' + id, { name, createdAt: now, createdBy: S.myId || null, simplify: true }))) return;
+    if (S.public) addKnown(id);
+    if (!(await write('groups/' + id, { name, createdAt: now, createdBy: S.myId || null, simplify: true }))) { if (S.public) dropKnown(id); return; }
+    if (S.public && S.groupsSub && S.groupsSub.refresh) S.groupsSub.refresh();
     if (me) await write('groups/' + id + '/members/' + nameId(me), { name: me, claimedBy: S.memory ? null : (S.myId || null), removed: false, createdAt: now, createdBy: S.myId || null });
-    closeSheet(); S.view = 'people'; openGroup(id); return;
+    closeSheet(); S.view = 'people'; S.pendingNew = id; openGroup(id); setTimeout(() => { if (S.pendingNew === id) S.pendingNew = null; }, 15000); return;
   }
   if (ev.target.id === 'joinadd') {
     const name = $('#jname').value.trim(); if (!name) return;
@@ -650,6 +667,7 @@ document.addEventListener('submit', async ev => {
 document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && $('#sheet').innerHTML) closeSheet(); });
 window.addEventListener('hashchange', () => {
   const id = location.hash.replace(/^#g-/, '');
+  if (S.public && id && !S.groups.some(g => g.id === id)) { addKnown(id); return; }
   if (id && id !== S.gid && S.groups.some(g => g.id === id)) { S.view = 'balances'; openGroup(id); }
   else if (S.gid && id !== S.gid) { try { history.replaceState(null, '', '#g-' + S.gid); } catch (_) {} }
 });
@@ -665,6 +683,7 @@ window.addEventListener('hashchange', () => {
   if (!S.public) { try { [db, user] = await Promise.all([window.claude ? window.claude.use('db') : null, window.claude ? window.claude.use('user') : null]); } catch (_) {} }
   S.user = user;
   if (user) { try { S.myId = await user.id(); } catch (_) {} try { const c = await user.can('data.write'); if (c === false) S.canWrite = false; } catch (_) {} }
+  if (!db && cfg) { S.memory = true; S.db = memoryDB(); S.canWrite = false; S.loaded.groups = S.loaded.members = S.loaded.records = true; render(); return; }
   if (!db) { S.memory = true; S.db = memoryDB(); S.myId = S.myId || 'local-me'; S.loaded.groups = true; connNote('Shared storage isn’t available in this view, so changes stay on this screen only. Open the page from its link while signed in to save and share.'); }
   else S.db = db;
   subscribeGroups();
